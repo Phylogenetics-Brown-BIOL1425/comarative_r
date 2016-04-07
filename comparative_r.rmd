@@ -1,0 +1,167 @@
+
+# Phylogenetic Independent Contrasts in R
+
+Casey W. Dunn
+
+
+
+## Introduction
+
+This document introduces you to a variety of tools and approaches to analyzing 
+phylogenetic data with R.
+
+There is detailed information on phylogenetic analysis with R at both 
+[the R phylo wiki](http://www.r-phylo.org/wiki/Main_Page) and the 
+[CRAN task page for phylogenetics](http://cran.r-project.org/web/views/Phylogenetics.html).
+Also consult the excellent book by Paradis (2012).
+
+Make sure that you have the most recent version of R installed. For the 
+analyses below, you will need to install the following libraries in R:
+
+
+- ape
+- geiger
+- phylobase
+- adephylo
+- fields
+
+
+Update them if they are not the latest version.
+
+## Simulations
+### Simulating trees
+
+First, load ape:
+
+```{r message=FALSE}
+library(ape)
+set.seed(4984356)
+```
+
+The simplest way to generate a random tree is with the rcoal() function:
+
+```{r}
+t <- rcoal( 30 )
+plot( t )
+```
+
+The only required argument is the number of taxa. rcoal() generates ultrametric 
+trees, the related function rtree() can be used to generate trees whose tips 
+are not contemporaneous.
+
+
+### Simulating phenotypic data on trees
+
+The `sim.char()` function from the geiger library is a convenient tool for 
+simulating character evolution. 
+
+We'll simulate three characters, each with a variance of 1. The fist two 
+characters will have a covariance of 0.7 with each other. The third characters 
+will have a covariance of 0 with the other characters. First, make a 
+variance-covariance matrix describes this relationship:
+
+```{r}
+vcv <- diag( 3 )
+vcv[1,2] <- 0.7
+vcv[2,1] <- 0.7
+vcv
+```
+
+Now, generate multiple simulated datasets on tree t according to vcv:
+
+
+```{r message=FALSE}
+library(geiger)
+D <- sim.char( t, vcv, nsim = 100, model = "BM", root = 0 )
+D[,,1]
+```
+
+
+```{r message=FALSE}
+library( adephylo )
+library( phylobase )
+D4 <- phylo4d( t, D[,,1] )
+table.phylo4d( D4, box=FALSE )
+```
+
+
+\section{Independent contrasts}
+
+Now construct independent contrasts for each of the three variables:
+
+```{r}
+ic1 <- pic( D[,1,1], t )
+ic2 <- pic( D[,2,1], t )
+ic3 <- pic( D[,3,1], t )
+
+cov( cbind( ic1, ic2, ic3 ) )
+```
+
+
+This matrix is based on a single simulation, and will differ by chance from the 
+original vcv matrix that we defined above. 
+
+
+Compare the result to what we get when we look at covariance of the values at the tips, rather than the independent contrasts:
+
+
+```{r}
+cov( cbind( D[,1,1], D[,2,1], D[,3,1] ) )
+```
+
+
+
+## Phylogenetic signal
+
+Many studies use `K` (Blomberg 2003) to assess the 
+"phylogenetic signal" of a character. Under a Brownian motion model on a 
+phylogenetic tree, a `K` of 1 is expected. For `K<1`, relatives resemble each 
+other less than expected. For `K>1`, relatives resemble each 
+other more than expected.
+
+This measure has been implemented in the picante library. 
+
+
+```{r message=FALSE}
+library(picante)
+Kcalc( D[,1,1], t )
+```
+
+Now take a look at `K` for a variable that has been simulated without 
+consideration of the tree:
+
+```{r}
+ntips <- length( t$tip.label )
+x <- rnorm( ntips, mean=0, sd=1 )
+names(x) <- names( D[,1,1] ) 
+Kcalc( x, t )
+```
+
+Neither of these values are exactly 1, but it is not clear if the difference 
+is significant. This can be addressed via randomization tests as implemented 
+by the phylosignal() function
+
+
+```{r}
+phylosignal( D[,1,1], t )
+phylosignal( x, t )
+```
+
+
+## How this document was made
+This document is a computable data report compiled directly from the data. 
+To recreate this file from the data, you can open it in RStudio and click the "Knit HTML" button.
+
+
+The following shows the versions of R software that were used to generate this 
+document:
+
+```{r}
+sessionInfo()
+```
+
+## References
+
+Blomberg, S. P., T. Garland, and A. R. Ives. 2003. Testing for phylogenetic signal in comparative data: behavioral traits are more labile. Evolution 57:717–745.
+
+Paradis, E. 2012. Analysis of Phylogenetics and Evolution With R. Springer Science+Business Media.
